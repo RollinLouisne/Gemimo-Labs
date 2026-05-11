@@ -1,7 +1,7 @@
 import { useParams, Link } from 'react-router-dom';
 import { MOCK_POSTS } from '../data/mockPosts';
-import { ArrowLeft, Linkedin, Facebook, CheckCircle2, Search, Zap, Play, Youtube } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { ArrowLeft, Linkedin, Facebook, CheckCircle2, Search, Zap, Play, Youtube, Heart, MessageSquare, Share2 } from 'lucide-react';
+import { useEffect, useState, useRef } from 'react';
 
 const XIcon = ({ className }: { className?: string }) => (
   <svg viewBox="0 0 24 24" aria-hidden="true" className={className} fill="currentColor">
@@ -13,6 +13,104 @@ export default function BlogPost() {
   const { id } = useParams();
   const post = MOCK_POSTS.find(p => p.id === id) || MOCK_POSTS[0];
   const [readingProgress, setReadingProgress] = useState(0);
+  
+  const commentsRef = useRef<HTMLDivElement>(null);
+  
+  const [likes, setLikes] = useState(0);
+  const [hasLiked, setHasLiked] = useState(false);
+  const [comments, setComments] = useState<{id: string, text: string, date: string, author: string}[]>([]);
+  const [newComment, setNewComment] = useState("");
+
+  // Sync state when post.id changes
+  useEffect(() => {
+    const savedLikes = localStorage.getItem(`likes-${post.id}`);
+    setLikes(savedLikes ? parseInt(savedLikes, 10) : 0);
+    const savedHasLiked = localStorage.getItem(`hasLiked-${post.id}`);
+    setHasLiked(savedHasLiked === 'true');
+    const savedComments = localStorage.getItem(`comments-${post.id}`);
+    setComments(savedComments ? JSON.parse(savedComments) : []);
+  }, [post.id]);
+
+  const handleLike = () => {
+    if (hasLiked) {
+      setLikes(prev => prev - 1);
+      setHasLiked(false);
+      localStorage.setItem(`likes-${post.id}`, (likes - 1).toString());
+      localStorage.setItem(`hasLiked-${post.id}`, 'false');
+    } else {
+      setLikes(prev => prev + 1);
+      setHasLiked(true);
+      localStorage.setItem(`likes-${post.id}`, (likes + 1).toString());
+      localStorage.setItem(`hasLiked-${post.id}`, 'true');
+    }
+  };
+
+  const handleCommentSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newComment.trim()) return;
+    const newC = {
+      id: Date.now().toString(),
+      text: newComment,
+      date: new Date().toLocaleDateString(),
+      author: "Guest Analyst"
+    };
+    const updated = [...comments, newC];
+    setComments(updated);
+    localStorage.setItem(`comments-${post.id}`, JSON.stringify(updated));
+    setNewComment("");
+  };
+
+  const handleShare = async () => {
+    const canonicalUrl = `https://gemimo-labs.vercel.app/blog/${post.id}`;
+    const shareData = {
+      title: post.title,
+      text: post.excerpt,
+      url: canonicalUrl,
+    };
+    if (navigator.share && navigator.canShare && navigator.canShare(shareData)) {
+      try {
+        await navigator.share(shareData);
+      } catch (err) {
+        console.error('Error sharing', err);
+      }
+    } else {
+      navigator.clipboard.writeText(canonicalUrl);
+      alert('Link copied to clipboard!');
+    }
+  };
+  
+  // Inject social meta tags
+  useEffect(() => {
+    document.title = `${post.title} | Gemimo Labs`;
+    const canonicalUrl = `https://gemimo-labs.vercel.app/blog/${post.id}`;
+    const updateMetaTag = (property: string, content: string) => {
+      let element = document.querySelector(`meta[property="${property}"]`) 
+                 || document.querySelector(`meta[name="${property}"]`);
+      if (!element) {
+        element = document.createElement('meta');
+        if (property.startsWith('og:')) {
+          element.setAttribute('property', property);
+        } else {
+          element.setAttribute('name', property);
+        }
+        document.head.appendChild(element);
+      }
+      element.setAttribute('content', content);
+      return element;
+    };
+
+    updateMetaTag('og:title', post.title);
+    updateMetaTag('og:description', post.excerpt);
+    updateMetaTag('og:image', post.imageUrl);
+    updateMetaTag('og:url', canonicalUrl);
+    updateMetaTag('og:site_name', 'Gemimo Labs');
+    updateMetaTag('og:type', 'article');
+    updateMetaTag('twitter:card', 'summary_large_image');
+    updateMetaTag('twitter:title', post.title);
+    updateMetaTag('twitter:description', post.excerpt);
+    updateMetaTag('twitter:image', post.imageUrl);
+    updateMetaTag('twitter:domain', 'gemimo-labs.vercel.app');
+  }, [post]);
   
   // Scroll to top on mount
   useEffect(() => {
@@ -72,17 +170,6 @@ export default function BlogPost() {
                   <div className="font-bold text-gray-900 text-lg">{post.author.name}</div>
                   <div className="text-sm text-gray-500 font-medium">Published {post.date} &middot; <a href="https://youtube.com/@gemimolabs" target="_blank" rel="noopener noreferrer" className="text-red-500 hover:underline">@gemimolabs</a></div>
                 </div>
-              </div>
-              <div className="hidden sm:flex flex-wrap gap-2">
-                <a href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(post.title)}&url=https://gemimolabs.com/blog/${post.id}`} target="_blank" rel="noopener noreferrer" className="w-10 h-10 rounded-full border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-50 hover:text-cyan-600 transition-colors shadow-sm">
-                  <XIcon className="w-4 h-4" />
-                </a>
-                <a href={`https://www.linkedin.com/shareArticle?mini=true&url=https://gemimolabs.com/blog/${post.id}&title=${encodeURIComponent(post.title)}`} target="_blank" rel="noopener noreferrer" className="w-10 h-10 rounded-full border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-50 hover:text-cyan-700 transition-colors shadow-sm">
-                  <Linkedin className="w-4 h-4" />
-                </a>
-                <a href={`https://www.facebook.com/sharer/sharer.php?u=https://gemimolabs.com/blog/${post.id}`} target="_blank" rel="noopener noreferrer" className="w-10 h-10 rounded-full border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-50 hover:text-cyan-600 transition-colors shadow-sm">
-                  <Facebook className="w-4 h-4" />
-                </a>
               </div>
             </div>
 
@@ -180,6 +267,25 @@ export default function BlogPost() {
               </div>
             </div>
 
+            {/* Engagement Actions */}
+            <div className="mt-12 mb-8 flex flex-col sm:flex-row justify-between items-center bg-gray-50 p-4 sm:p-6 rounded-2xl border border-gray-100 gap-4">
+              <div className="text-gray-900 font-bold text-lg text-center sm:text-left">Did you find this valuable?</div>
+              <div className="flex flex-row items-center w-full sm:w-auto justify-center gap-2 sm:gap-3">
+                <button onClick={handleLike} className={`flex-1 sm:flex-none justify-center px-4 sm:px-6 h-12 rounded-full border flex items-center gap-2 transition-colors shadow-sm font-medium text-sm sm:text-base ${hasLiked ? 'bg-cyan-50 border-cyan-200 text-cyan-600' : 'bg-white border-gray-200 text-gray-800 hover:bg-gray-50'}`}>
+                  <Heart className={`w-4 h-4 sm:w-5 sm:h-5 ${hasLiked ? 'fill-cyan-600' : ''}`} />
+                  {likes > 0 ? likes : 'Like'}
+                </button>
+                <button onClick={() => commentsRef.current?.scrollIntoView({ behavior: 'smooth' })} className="flex-1 sm:flex-none justify-center px-4 sm:px-6 h-12 rounded-full bg-white border border-gray-200 flex items-center gap-2 text-gray-800 hover:bg-gray-50 transition-colors shadow-sm font-medium text-sm sm:text-base">
+                  <MessageSquare className="w-4 h-4 sm:w-5 sm:h-5" />
+                  {comments.length > 0 ? comments.length : 'Comment'}
+                </button>
+                <button onClick={handleShare} className="flex-1 sm:flex-none justify-center px-4 sm:px-6 h-12 rounded-full bg-white border border-gray-200 flex items-center gap-2 text-gray-800 hover:bg-gray-50 transition-colors shadow-sm font-medium text-sm sm:text-base">
+                  <Share2 className="w-4 h-4 sm:w-5 sm:h-5" />
+                  Share
+                </button>
+              </div>
+            </div>
+
             {/* Tags / Author Box Footer */}
             <div className="mt-16 pt-10 border-t border-gray-100">
                <div className="bg-white rounded-3xl p-8 sm:p-10 border border-gray-100 shadow-xl flex flex-col sm:flex-row gap-8 items-center sm:items-start text-center sm:text-left transition-all hover:shadow-2xl hover:border-cyan-100">
@@ -199,6 +305,56 @@ export default function BlogPost() {
                        </a>
                     </div>
                   </div>
+               </div>
+            </div>
+
+            {/* Comments Section */}
+            <div ref={commentsRef} className="mt-16 pt-10 border-t border-gray-100">
+               <h3 className="text-2xl font-bold text-gray-900 mb-8 flex items-center gap-2">
+                 <MessageSquare className="w-6 h-6 text-cyan-500" /> Responses ({comments.length})
+               </h3>
+               
+               {/* Comment Form */}
+               <form onSubmit={handleCommentSubmit} className="mb-10">
+                  <div className="bg-gray-50 rounded-2xl border border-gray-200 overflow-hidden focus-within:border-cyan-400 focus-within:ring-1 focus-within:ring-cyan-400 transition-all">
+                    <textarea 
+                      value={newComment}
+                      onChange={(e) => setNewComment(e.target.value)}
+                      placeholder="Add a well-reasoned response..."
+                      className="w-full bg-transparent border-0 p-4 min-h-[100px] focus:ring-0 text-gray-800 resize-y outline-none"
+                    />
+                    <div className="bg-white px-4 py-3 border-t border-gray-200 flex justify-end">
+                       <button 
+                         type="submit" 
+                         disabled={!newComment.trim()}
+                         className="bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50 disabled:hover:bg-cyan-600 text-white font-bold py-2 px-6 rounded-xl transition-colors text-sm"
+                       >
+                         Post Response
+                       </button>
+                    </div>
+                  </div>
+               </form>
+
+               {/* Comments List */}
+               <div className="space-y-8">
+                 {comments.length === 0 ? (
+                   <p className="text-gray-500 text-center py-8">Be the first to share your perspective.</p>
+                 ) : (
+                   comments.map(comment => (
+                     <div key={comment.id} className="flex gap-4 bg-gray-50 p-6 rounded-2xl border border-gray-100">
+                       <div className="w-10 h-10 rounded-full bg-cyan-100 text-cyan-800 font-bold flex items-center justify-center shrink-0">
+                         {comment.author.charAt(0)}
+                       </div>
+                       <div className="flex-1">
+                         <div className="flex items-baseline gap-2 mb-2">
+                           <span className="font-bold text-gray-900">{comment.author}</span>
+                           <span className="text-xs text-gray-500">{comment.date}</span>
+                         </div>
+                         <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">{comment.text}</p>
+                       </div>
+                     </div>
+                   ))
+                 )}
                </div>
             </div>
 
